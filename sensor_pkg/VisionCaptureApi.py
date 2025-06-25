@@ -389,7 +389,8 @@ class VisionCaptureApi:
         u16Value = [srcs.checksum, srcs.sensorType, srcs.updateFreq, srcs.port]
         u8Value = srcs.IP
         fValue = srcs.Params
-        buf = struct.pack("4H4B6f", *u16Value, *u8Value, *fValue)
+        all_values = u16Value + u8Value + fValue  # Concatenate lists first
+        buf = struct.pack("4H4B6f", *all_values)   # Unpack the single combined list
         self.udp_socket.sendto(buf, (IP, 30100 + (copterID - 1) * 2))
 
     def sendImuReqCopterSim(self, copterID=1, IP="127.0.0.1", freq=200):
