@@ -660,7 +660,9 @@ class VisionCaptureApi:
                 + vs.SensorAngEular
                 + vs.otherParams[0:8]
             )
-            buf = struct.pack("16H15f", *intValue, *floValue)
+            combined = intValue+floValue
+
+            buf = struct.pack("16H15f", *combined)
         if IP == "":  # If the IP of the CopterSim computer is specified, use this value
             IP = self.ip
         self.udp_socket.sendto(buf, (IP, 20010 + windID))
@@ -793,7 +795,9 @@ class VisionCaptureApi:
                     + vs.SensorAngQuat
                     + vs.otherParams
                 )
-                buf = struct.pack("16H28f", *intValue, *floValue)
+                combined = intValue+floValue
+
+                buf = struct.pack("16H28f", *combined)
             else:  # Send using old protocol version
                 floValue = (
                     [vs.CameraFOV]
@@ -801,7 +805,9 @@ class VisionCaptureApi:
                     + vs.SensorAngEular
                     + vs.otherParams[0:8]
                 )
-                buf = struct.pack("16H15f", *intValue, *floValue)
+                combined = intValue+floValue
+
+                buf = struct.pack("16H15f", *combined)
             self.udp_socket.sendto(buf, (IP, 20010 + windID))
 
         time.sleep(1)
