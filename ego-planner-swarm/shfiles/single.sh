@@ -2,7 +2,7 @@
 
 # Start swarm script
 cd /home/sensor_pkg
-python single.py &
+python3 single.py &
 sleep 1
 
 # Start Rflysim PX4 node
