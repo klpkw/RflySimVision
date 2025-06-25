@@ -6,7 +6,7 @@ Requirements: Windows10/11
 2. Download the demo code of RflySimVision at [https://github.com/Ding-Guo/RflySimVision.git](https://github.com/Ding-Guo/RflySimVision.git)
 3. open wsl  
 ```
-cp RflySimVision/ego-planner-swarm RflySimVision/sensor_pkg /home 
+cp -r RflySimVision/ego-planner-swarm RflySimVision/sensor_pkg /home 
 cd /home/ego-planner-swarm
 catkin_make
 ``` 
