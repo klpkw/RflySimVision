@@ -16,7 +16,6 @@ import copy
 import platform
 import time
 
-# 是否启用ROS图像转发功能
 # IsEnable ROS image topic forwarding
 isEnableRosTrans = False
 is_use_ros1 = True
@@ -31,7 +30,7 @@ if platform.system().lower() == "linux":
         from xml.etree.ElementTree import tostring
         import yaml
 
-        # 加入其他的ROS库
+        # Import other ROS libraries
         from std_msgs.msg import String
         import sensor_msgs.msg as sensor
         import std_msgs.msg as std_msg
@@ -48,11 +47,11 @@ if platform.system().lower() == "linux":
             is_use_ros1 = False
 
     except ImportError:
-        print("Faild to load ROS labs")
+        print("Failed to load ROS libs")
 
 
 class Queue:
-    """pacth"""
+    """patch"""
 
     def __init__(self):
         self.items = []
@@ -70,37 +69,37 @@ class Queue:
         return len(self.items)
 
 
-# 注意:本条消息会发送给指定远端电脑的端口20005
+# Note: This message will be sent to port 20005 of the specified remote computer
 # struct RflyTimeStmp{
-#     int checksum; //校验位，取123456789
-#     int copterID; //当前飞机的ID号
-#     long long SysStartTime; //开始仿真时的时间戳（单位毫秒，格林尼治标准起点）
-#     long long SysCurrentTime;//当前时间戳（单位毫秒，格林尼治标准起点）
-#     long long HeartCount; //心跳包的计数器
+#     int checksum; //Checksum, value is 123456789
+#     int copterID; //ID of the current aircraft
+#     long long SysStartTime; //Timestamp at the start of simulation (in milliseconds, Greenwich Mean Time origin)
+#     long long SysCurrentTime;//Current timestamp (in milliseconds, Greenwich Mean Time origin)
+#     long long HeartCount; //Heartbeat packet counter
 # } 2i3q
 class RflyTimeStmp:
     def __init__(self):
         self.checksum = 1234567897
         self.copterID = 0
-        self.SysStartTime = 0  # CopterSim开始仿真时，电脑的时间戳（单位秒）
-        self.SysCurrentTime = 0  # CopterSim运行电脑当前的时间戳（单位秒）
+        self.SysStartTime = 0  # Timestamp of the computer when CopterSim starts simulation (in seconds)
+        self.SysCurrentTime = 0  # Current timestamp of the computer running CopterSim (in seconds)
         self.HeartCount = 0
 
-        # Python端处理的时间戳。
+        # Timestamp processed by the Python side.
         self.isCopterSimOnPC = False
-        # 注意：如果CopterSim和本Python脚本在一台电脑，SysCurrentTime和time.time()的数值应该相差很小（最多延迟10ms）
-        # 以此差值来判断，CopterSim和本Python脚本是否在一台电脑上
-        self.rosStartTimeStmp = 0  # CopterSim开始仿真时，本Python脚本电脑ROS的时间戳
-        # 注意：如果CopterSim和本Python脚本在一台电脑
-        # 那么pyStartTimeStmp<--SysStartTime直接用CopterSim记录的起始仿真时间
-        # 那么rosStartTimeStmp<--pyStartTimeStmp + ROSTime - time.time()，也就是说加上一个ROS时间相对本机的偏差量
+        # Note: If CopterSim and this Python script are on the same computer, the values of SysCurrentTime and time.time() should be very close (max delay 10ms)
+        # This difference is used to determine if CopterSim and this Python script are on the same computer
+        self.rosStartTimeStmp = 0  # ROS timestamp of this Python script's computer when CopterSim starts simulation
+        # Note: If CopterSim and this Python script are on the same computer
+        # Then pyStartTimeStmp <-- SysStartTime directly uses the simulation start time recorded by CopterSim
+        # Then rosStartTimeStmp <-- pyStartTimeStmp + ROSTime - time.time(), meaning add the offset of ROS time relative to the local machine
 
         self.pyStartTimeStmp = 0
 
-        # 如果CopterSim和本Python脚本不在一台电脑
-        # 那么pyStartTimeStmp<--time.time() - SysCurrentTime + SysStartTime - 10
-        # 也就是根据当前的仿真时间（SysCurrentTime-SysStartTime）去逆推CopterSim开始仿真时时间，这里加了一个10毫秒的延迟量
-        # 那么rosStartTimeStmp<--pyStartTimeStmp + ROSTime - time.time()，也就是说加上一个ROS时间相对本机的偏差量
+        # If CopterSim and this Python script are not on the same computer
+        # Then pyStartTimeStmp <-- time.time() - SysCurrentTime + SysStartTime - 0.01
+        # That is, deduce the CopterSim start time based on the current simulation time (SysCurrentTime-SysStartTime), with an added 10 millisecond delay allowance
+        # Then rosStartTimeStmp <-- pyStartTimeStmp + ROSTime - time.time(), meaning add the offset of ROS time relative to the local machine
 
     def __init__(self, iv):
         self.checksum = iv[0]
@@ -120,21 +119,21 @@ class RflyTimeStmp:
 class VisionSensorReq:
     """This is a class (C++ struct) that sent to UE4 to request and set camera parameters.
     # struct VisionSensorReq {
-        uint16 checksum; //数据校验位，12345
-        uint16 SeqID; //内存序号ID
-        uint16 TypeID; //传感器类型ID
-        uint16 TargetCopter; //绑定的目标飞机     //可改变
-        uint16 TargetMountType; //绑定的类型    //可改变
-        uint16 DataWidth;   //数据或图像宽度
-        uint16 DataHeight; //数据或图像高度
-        uint16 DataCheckFreq; //检查数据更新频率
-        uint16 SendProtocol[8]; //传输类型（共享内存、UDP传输无压缩、UDP视频串流），IP地址，端口号，...
-        float CameraFOV;  //相机视场角（仅限视觉类传感器）  //可改变
-        float SensorPosXYZ[3]; // 传感器安装位置    //可改变
-        float EularOrQuat; //选择欧拉角或四元数方式，大于0.5就是四元数
-        float SensorAngEular[3]; //传感器安装角度   //可改变
-        float SensorAngQuat[4]; //传感器安装四元数   //可改变
-        float otherParams[16]; //预留的16位数据位
+        uint16 checksum; //Data checksum, 12345
+        uint16 SeqID; //Memory sequence ID
+        uint16 TypeID; //Sensor type ID
+        uint16 TargetCopter; //Bound target aircraft     //Changeable
+        uint16 TargetMountType; //Binding type    //Changeable
+        uint16 DataWidth;   //Data or image width
+        uint16 DataHeight; //Data or image height
+        uint16 DataCheckFreq; //Frequency for checking data updates
+        uint16 SendProtocol[8]; //Transmission type (shared memory, UDP uncompressed, UDP video stream), IP address, port number, ...
+        float CameraFOV;  //Camera field of view (visual sensors only)  //Changeable
+        float SensorPosXYZ[3]; // Sensor installation position    //Changeable
+        float EularOrQuat; //Select Euler angle or quaternion method, >0.5 means quaternion
+        float SensorAngEular[3]; //Sensor installation angle   //Changeable
+        float SensorAngQuat[4]; //Sensor installation quaternion   //Changeable
+        float otherParams[16]; //Reserved 16 float data slots
     # }16H28f
     """
 
@@ -159,9 +158,9 @@ class VisionSensorReq:
 class imuDataCopter:
     """This is a class (C++ struct) for IMU data receive from CopterSim
     # struct imuDataCopter{
-    #     int checksum; //数据校验位1234567898
-    #     int seq; //消息序号
-    #     double timestmp;//时间戳
+    #     int checksum; //Data checksum 1234567898
+    #     int seq; //Message sequence number
+    #     double timestmp;//Timestamp
     #     float acc[3];
     #     float rate[3];
     # }   //2i1d6f
@@ -175,11 +174,11 @@ class imuDataCopter:
         self.timestmp = 0
         self.acc = [0, 0, 0]
         self.rate = [0, 0, 0]
-        self.imuStmp = 0  # 经过校正的IMU时间戳
-        self.rflyStartStmp = 0  # CopterSim开始仿真的时间戳
+        self.imuStmp = 0  # Corrected IMU timestamp
+        self.rflyStartStmp = 0  # Timestamp when CopterSim started simulation
         if isEnableRosTrans:
             self.time_record = -1
-            self.isUseTimeAlign = True  # 是否使用与图像时间对其的方式发布数据
+            self.isUseTimeAlign = True  # Whether to publish data aligned with image time
             if len(imu_name) == 0:
                 imu_name = "/rflysim/imu"
             if is_use_ros1:
@@ -201,7 +200,7 @@ class imuDataCopter:
             self.imu_frame_id = "imu"
             self.ros_imu.header.frame_id = self.imu_frame_id
 
-    def AlignTime(self, img_time):  # 原子操作不需要用锁，用了反而较低下率
+    def AlignTime(self, img_time):  # Atomic operations do not require locks; using them reduces efficiency
         self.newest_time_img = img_time
         # print("queue size: ",self.time_queue.size())
         # print("current <img:%f,imu:%f>"% (img_time,self.test_imu_time))
@@ -304,20 +303,20 @@ class VisionCaptureApi:
             else:
                 rclpy.init()
                 self.ros_node = Node("RecvRFlySim3DData")
-                # print("If you want use to ROS2, pelease set rosnode_id at initialize  class VisionCaptureApi")
+                # print("If you want use to ROS2, please set rosnode_id at initialize  class VisionCaptureApi")
                 # sys.exit(-1)
             self.time_record = Any
             self.rostime = Any
-            # 加入ROS节点的初始化工作
-        self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # 创建套接字
+            # Add ROS node initialization work
+        self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Create socket
         self.udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         self.udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.udp_imu = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # 创建套接字
+        self.udp_imu = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Create socket
         self.udp_imu.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.hostIp = socket.gethostbyname(socket.gethostname())  # 获取本机电脑的IP
+        self.hostIp = socket.gethostbyname(socket.gethostname())  # Get local computer's IP
         self.VisSensor = []
         self.Img = []
-        self.Img_lock = []  # 为类似多线程数据同步,加上线程锁
+        self.Img_lock = []  # Add thread lock for multi-threaded data synchronization
         self.ImgData = []
         self.hasData = []
         self.timeStmp = []
@@ -356,7 +355,7 @@ class VisionCaptureApi:
                 self.sensors_num = y["sensors_num"]
                 self.imu_topic_name = y["imu_topic_name"]
             except IOError:
-                print("使用默认的全局坐标系下的frame_id:map")
+                print("Using default global coordinate system frame_id: map")
 
         if isEnableRosTrans:
             if not is_use_ros1:
@@ -371,7 +370,7 @@ class VisionCaptureApi:
             self.imu = imuDataCopter()
             if isEnableRosTrans:
                 self.imu.imu_frame_id = self.imu_frame_id
-        # self.lock = threading.Lock() #应用到IMU和图像数据时间对齐处理
+        # self.lock = threading.Lock() #Applied to IMU and image data time alignment processing
 
     def addVisSensor(self, vsr=VisionSensorReq()):
         """Add a new VisionSensorReq struct to the list"""
@@ -423,11 +422,11 @@ class VisionCaptureApi:
             BackIP=self.RemotSendIP
 
         srcs = SensorReqCopterSim()
-        srcs.sensorType = 0  # IMU传感器数据
+        srcs.sensorType = 0  # IMU sensor data
         srcs.updateFreq = freq
 
-        # 返回地址默认为127的地址，CopterSim收到后会原IP返回
-        # 如果self.RemotSendIP有设置过的话，CopterSim会将数据转发到指定端口
+        # The return address defaults to 127.x.x.x, CopterSim will return to the original IP after receiving
+        # If self.RemotSendIP is set, CopterSim will forward data to the specified port
         cList = BackIP.split(".")
         if len(cList) == 4:
             srcs.IP[0] = int(cList[0])
@@ -435,7 +434,7 @@ class VisionCaptureApi:
             srcs.IP[2] = int(cList[2])
             srcs.IP[3] = int(cList[3])
         srcs.port = 31000 + copterID - 1
-        self.sendReqToCopterSim(srcs, copterID,IP)  # 发送消息请求IMU数据
+        self.sendReqToCopterSim(srcs, copterID,IP)  # Send message to request IMU data
 
     def sendImuReqServe(self, copterID=1):
         """send command to CopterSim to request IMU data
@@ -462,7 +461,7 @@ class VisionCaptureApi:
 
         # if self.tTimeStmpFlag
 
-        print("Start lisening to IMU Msg")
+        print("Start listening to IMU Msg")
         while True:
             try:
                 buf, addr = self.udp_imu.recvfrom(65500)
@@ -474,7 +473,7 @@ class VisionCaptureApi:
                         self.imu.seq = IMUData[1]
                         self.imu.timestmp = IMUData[2]
 
-                        if self.imu.rflyStartStmp < 0.01:  # 说明还没获取到过CopterSim时间戳
+                        if self.imu.rflyStartStmp < 0.01:  # Indicates that CopterSim timestamp has not been obtained yet
                             print("No CopterSim time, use image time to calculate.")
                             if isEnableRosTrans:
                                 if is_use_ros1:
@@ -512,7 +511,7 @@ class VisionCaptureApi:
                                 self.imu.Imu2ros()
                             else:
                                 self.imu.Imu2ros(self.ros_node)
-                            # 将IMU消息，推送到ROS消息中
+                            # Push IMU message to ROS message
 
             except Exception as ex:
                 print("Error to listen to IMU Msg!")
@@ -521,10 +520,10 @@ class VisionCaptureApi:
 
     def StartTimeStmplisten(self):
         """Start to listen to 20005 port to get RflyTimeStmp of CopterID"""
-        self.udp_time = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # 创建套接字
+        self.udp_time = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # Create socket
         self.udp_time.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.udp_time.bind(("0.0.0.0", 20005))
-        # 增加对组播端口的支持
+        # Add support for multicast port
 
         try:
             status = self.udp_time.setsockopt(
@@ -547,7 +546,7 @@ class VisionCaptureApi:
     def TimeStmploop(self):
         global isEnableRosTrans
         global is_use_ros1
-        print("Start lisening to timeStmp Msg")
+        print("Start listening to timeStmp Msg")
         self.udp_time.settimeout(3)
         while self.tTimeStmpFlag:
             try:
@@ -561,7 +560,7 @@ class VisionCaptureApi:
                         for i in range(len(self.RflyTimeVect)):
                             if self.RflyTimeVect[i].copterID == cpIDTmp:
                                 isTimeExist = True
-                                # 如果已经在列表中了，就不再接收
+                                # If it's already in the list, don't receive it again
                                 # self.RflyTimeVect[i].Update(TimeData)
                                 break
 
@@ -573,10 +572,10 @@ class VisionCaptureApi:
                                 CurPyTime - tStmp.SysCurrentTime > 0
                                 and CurPyTime - tStmp.SysCurrentTime < 0.1
                             ):
-                                tStmp.isCopterSimOnPC = True  # 说明Python和CopterSim在一台电脑上
+                                tStmp.isCopterSimOnPC = True  # Indicates Python and CopterSim are on the same computer
                                 tStmp.pyStartTimeStmp = tStmp.SysStartTime
                                 print("CopterSim running on this PC")
-                            else:  # 说明本Python脚本和CopterSim不在一台电脑上
+                            else:  # Indicates this Python script and CopterSim are not on the same computer
                                 tStmp.isCopterSimOnPC = False
                                 tStmp.pyStartTimeStmp = (
                                     CurPyTime
@@ -602,18 +601,18 @@ class VisionCaptureApi:
 
                             self.RflyTimeVect = self.RflyTimeVect + [
                                 copy.deepcopy(tStmp)
-                            ]  # 扩充列表，增加一个元素
+                            ]  # Extend list, add an element
 
             except:
                 print("No Time Msg!")
-                # 跳出循环，不再继续监听
+                # Break the loop, stop listening
                 break
 
     def sendUpdateUEImage(self, vs=VisionSensorReq(), windID=0, IP=""):
         if not isinstance(vs, VisionSensorReq):
             raise Exception("Wrong data input to addVisSensor()")
         
-        # 如果是Linux系统，则获取自己的IP地址
+        # If it's a Linux system, get its own IP address
         if isLinux and (vs.SendProtocol[1]==127 or vs.SendProtocol[1]==0):
             ip=''
             try:
@@ -642,7 +641,7 @@ class VisionCaptureApi:
             vs.DataHeight,
             vs.DataCheckFreq,
         ] + vs.SendProtocol
-        if self.isNewJson:  # 使用新版协议发送
+        if self.isNewJson:  # Send using new protocol version
             floValue = (
                 [vs.CameraFOV]
                 + vs.SensorPosXYZ
@@ -652,7 +651,7 @@ class VisionCaptureApi:
                 + vs.otherParams
             )
             buf = struct.pack("16H28f", *intValue, *floValue)
-        else:  # 使用旧版协议发送
+        else:  # Send using old protocol version
             floValue = (
                 [vs.CameraFOV]
                 + vs.SensorPosXYZ
@@ -660,14 +659,14 @@ class VisionCaptureApi:
                 + vs.otherParams[0:8]
             )
             buf = struct.pack("16H15f", *intValue, *floValue)
-        if IP == "":  # 如果指定了coptersim 电脑上的IP 使用这个值
+        if IP == "":  # If the IP of the CopterSim computer is specified, use this value
             IP = self.ip
         self.udp_socket.sendto(buf, (IP, 20010 + windID))
         if self.RemotSendIP != "" and self.RemotSendIP != "127.0.0.1":
             self.udp_socket.sendto(buf, (self.RemotSendIP, 20010 + windID))
 
     def sendUE4Cmd(self, cmd, windowID=-1):
-        # 如果是str类型，则转换为bytes类型
+        # If it's a str type, convert to bytes type
         if isinstance(cmd, str):
             cmd = cmd.encode()
 
@@ -680,7 +679,7 @@ class VisionCaptureApi:
             print("Error: Cmd is too long")
             return
         if windowID < 0:
-            for i in range(3):  # 假设最多开了三个窗口
+            for i in range(3):  # Assume at most three windows are open
                 self.udp_socket.sendto(buf, (self.ip, 20010 + i))
 
             # if self.ip == "127.0.0.1":
@@ -694,7 +693,7 @@ class VisionCaptureApi:
             # if self.ip != "127.0.0.1" and self.ip != "255.255.255.255":
             #     self.udp_socket.sendto(
             #         buf, ("127.0.0.1", 20010 + windowID)
-            #     )  # ensure this PC can reciver message under specify IP mode
+            #     )  # ensure this PC can receive message under specify IP mode
             self.udp_socket.sendto(
                 buf, (self.ip, 20010 + windowID)
             )  # specify PC's IP to send
@@ -720,7 +719,7 @@ class VisionCaptureApi:
             for i in range(len(self.VisSensor)):
                 if (
                     self.isUE4DirectUDP and self.VisSensor[i].SendProtocol[0] == 0
-                ):  # 如果之前设置的是共享内存方式，则强制转化为UDP直发
+                ):  # If shared memory was previously set, force conversion to direct UDP sending
                     self.VisSensor[i].SendProtocol[0] = 1
                 if self.RemotSendIP != "":
                     cList = self.RemotSendIP.split(".")
@@ -737,24 +736,24 @@ class VisionCaptureApi:
 
         for i in range(len(self.VisSensor)):
             # struct VisionSensorReq {
-            # 	uint16 checksum; //数据校验位，12345
-            # 	uint16 SeqID; //内存序号ID
-            # 	uint16 TypeID; //传感器类型ID
-            # 	uint16 TargetCopter; //绑定的目标飞机     //可改变
-            # 	uint16 TargetMountType; //绑定的类型    //可改变
-            # 	uint16 DataWidth;   //数据或图像宽度
-            # 	uint16 DataHeight; //数据或图像高度
-            # 	uint16 DataCheckFreq; //检查数据更新频率
-            # 	uint16 SendProtocol[8]; //传输类型（共享内存、UDP传输无压缩、UDP视频串流），IP地址，端口号，...
-            # 	float CameraFOV;  //相机视场角（仅限视觉类传感器）  //可改变
-            #   float EularOrQuat; //选择欧拉角或四元数方式，大于0.5就是四元数
-            #   float SensorAngEular[3]; //传感器安装角度   //可改变
-            #   float SensorAngQuat[4]; //传感器安装四元数   //可改变
-            #   float otherParams[16]; //预留的16位数据位
+            # 	uint16 checksum; //Data checksum, 12345
+            # 	uint16 SeqID; //Memory sequence ID
+            # 	uint16 TypeID; //Sensor type ID
+            # 	uint16 TargetCopter; //Bound target aircraft     //Changeable
+            # 	uint16 TargetMountType; //Binding type    //Changeable
+            # 	uint16 DataWidth;   //Data or image width
+            # 	uint16 DataHeight; //Data or image height
+            # 	uint16 DataCheckFreq; //Frequency for checking data updates
+            # 	uint16 SendProtocol[8]; //Transmission type (shared memory, UDP uncompressed, UDP video stream), IP address, port number, ...
+            # 	float CameraFOV;  //Camera field of view (visual sensors only)  //Changeable
+            #   float EularOrQuat; //Select Euler angle or quaternion method, >0.5 means quaternion
+            #   float SensorAngEular[3]; //Sensor installation angle   //Changeable
+            #   float SensorAngQuat[4]; //Sensor installation quaternion   //Changeable
+            #   float otherParams[16]; //Reserved 16 float data slots
             # }16H28f
             vs = self.VisSensor[i]
             
-            # 如果是Linux系统，则获取自己的IP地址
+            # If it's a Linux system, get its own IP address
             if isLinux and (vs.SendProtocol[1]==127 or vs.SendProtocol[1]==0):
                 ip=''
                 try:
@@ -783,7 +782,7 @@ class VisionCaptureApi:
                 vs.DataHeight,
                 vs.DataCheckFreq,
             ] + vs.SendProtocol
-            if self.isNewJson:  # 使用新版协议发送
+            if self.isNewJson:  # Send using new protocol version
                 floValue = (
                     [vs.CameraFOV]
                     + vs.SensorPosXYZ
@@ -793,7 +792,7 @@ class VisionCaptureApi:
                     + vs.otherParams
                 )
                 buf = struct.pack("16H28f", *intValue, *floValue)
-            else:  # 使用旧版协议发送
+            else:  # Send using old protocol version
                 floValue = (
                     [vs.CameraFOV]
                     + vs.SensorPosXYZ
@@ -809,18 +808,18 @@ class VisionCaptureApi:
             return True
 
         # struct UE4CommMemData {
-        # 	int Checksum;//校验位，设置为1234567890
-        # 	int totalNum;//最大传感器数量
-        # 	int WidthHeigh[64];//分辨率宽高序列，包含最多32个传感器的
+        # 	int Checksum;//Checksum, set to 1234567890
+        # 	int totalNum;//Maximum number of sensors
+        # 	int WidthHeigh[64];//Resolution width/height sequence, contains up to 32 sensors
         # }
-        if isLinux:  # Linux下共享内存代码
+        if isLinux:  # Shared memory code for Linux
             # Linux mmap
             # SHARE_MEMORY_FILE_SIZE_BYTES = 66*4
             f = open("/dev/shm/UE4CommMemData", "r+b")
             fd = f.fileno()
             self.mm0 = mmap.mmap(fd, 66 * 4)
-        else:  # Windows下共享内存代码
-            self.mm0 = mmap.mmap(0, 66 * 4, "UE4CommMemData")  # 公共区
+        else:  # Shared memory code for Windows
+            self.mm0 = mmap.mmap(0, 66 * 4, "UE4CommMemData")  # Common area
 
         Data = np.frombuffer(self.mm0, dtype=np.int32)
         checksum = Data[0]
@@ -862,7 +861,7 @@ class VisionCaptureApi:
         timeList = []
         recPackNum = 0
         timeStmpStore = 0
-        IsReframe = False  # 判断是否重复接受到了帧
+        IsReframe = False  # To determine if a frame has been received repeatedly
         no_fid_len = struct.calcsize("4i1d")
         fid_len = struct.calcsize("6i1d")
         dd = None
@@ -870,77 +869,77 @@ class VisionCaptureApi:
             if isEnableRosTrans and ((is_use_ros1 and rospy.is_shutdown())):
                 break
             try:
-                buf, addr = udpSok.recvfrom(imgPackUnit + 2000)  # 加一些余量，确保包头数据考虑在内
+                buf, addr = udpSok.recvfrom(imgPackUnit + 2000)  # Add some margin to ensure header data is included
             except socket.error:
                 continue
 
-            if CheckSum == -1:  # 第一帧初始化CheckSum
+            if CheckSum == -1:  # Initialize CheckSum for the first frame
                 CheckSum = struct.unpack("1i", buf[0:CheckSumSize])
-                if CheckSum[0] == 1234567890:  # 不包含帧id的数据
+                if CheckSum[0] == 1234567890:  # Data without frame ID
                     fhead_len = no_fid_len
                     Frameid == 0
-                if CheckSum[0] == 1234567893:  # 包含帧ID的数据a
+                if CheckSum[0] == 1234567893:  # Data with frame ID
                     fhead_len = fid_len
                     Frameid == 0
-            if len(buf) < fhead_len:  # 如果数据包还没包头长，数据错误
+            if len(buf) < fhead_len:  # If packet length is less than header length, data error
                 print("img_udp_thrdNew len(buf)<fhead_size")
                 continue
             if fhead_len == fid_len:
-                dd = struct.unpack("6i1d", buf[0:fhead_len])  # 校验，包长度，包序号，总包数，时间戳
-                if dd[-3] != Frameid and dd[2] == 0:  # 更新帧ID
+                dd = struct.unpack("6i1d", buf[0:fhead_len])  # Checksum, packet length, packet sequence, total packets, timestamp
+                if dd[-3] != Frameid and dd[2] == 0:  # Update frame ID
                     if dd[-3] < 0:
                         print(
                             "\033[31m frame id less than zero ! \033[0m"
-                        )  # 发送端没做int溢出处理
+                        )  # Sender didn't handle int overflow
                     Frameid = dd[-3]
                     IsReFrame = False
                 elif dd[-3] == Frameid and dd[2] == 0:
-                    # print("have same frame received")  # 同一帧多次被接受
+                    # print("have same frame received")  # Same frame received multiple times
                     IsReFrame = True
                     continue
-                if IsReFrame:  # 如果一帧分多个包，那么重复帧的里面非第0个包也不需要处理了
+                if IsReFrame:  # If a frame is split into multiple packets, non-zero packets of a repeated frame also don't need processing
                     continue
             if fhead_len == no_fid_len:
-                dd = struct.unpack("4i1d", buf[0:fhead_len])  # 校验，包长度，包序号，总包数，时间戳
+                dd = struct.unpack("4i1d", buf[0:fhead_len])  # Checksum, packet length, packet sequence, total packets, timestamp
             if dd == None:
-                print("\033[31m Protocol error\033[0m")  # 通信协议不匹配
+                print("\033[31m Protocol error\033[0m")  # Communication protocol mismatch
                 continue
-            if dd[0] != CheckSum[0] or dd[1] != len(buf):  # 校验位不对或者长度不对
+            if dd[0] != CheckSum[0] or dd[1] != len(buf):  # Incorrect checksum or length
                 print("\033[31m Wrong Data!\033[0m")
                 continue
-            packSeq = dd[2]  # 包序号
-            if packSeq == 0:  # 如果是第一个包
-                seqList = []  # 清空数据序号列表
-                dataList = []  # 清空数据缓存列表
-                seqList = seqList + [packSeq]  # 提取序号
-                dataList = dataList + [buf[fhead_len:]]  # 提取包头剩余数据
-                timeStmpStore = dd[-1]  # 最后一个是时间戳
-                recPackNum = dd[3]  # 以包头定义的总包作为接收结束标志
-            else:  # 如果不是包头，直接将其存入列表
+            packSeq = dd[2]  # Packet sequence number
+            if packSeq == 0:  # If it's the first packet
+                seqList = []  # Clear data sequence list
+                dataList = []  # Clear data buffer list
+                seqList = seqList + [packSeq]  # Extract sequence number
+                dataList = dataList + [buf[fhead_len:]]  # Extract remaining data after header
+                timeStmpStore = dd[-1]  # The last one is the timestamp
+                recPackNum = dd[3]  # Use total packets defined in header as reception end flag
+            else:  # If not the header, directly store it in the list
                 if recPackNum == 0:
                     continue
-                # 如果时间戳不一致
+                # If timestamps don't match
                 if not math.isclose(timeStmpStore, dd[-1], rel_tol=0.00001):
-                    continue  # 跳过这个包
-                seqList = seqList + [packSeq]  # 提取序号
-                dataList = dataList + [buf[fhead_len:]]  # 提取包头剩余数据
+                    continue  # Skip this packet
+                seqList = seqList + [packSeq]  # Extract sequence number
+                dataList = dataList + [buf[fhead_len:]]  # Extract remaining data after header
             # if typeID==2:
             # print(seqList,recPackNum,len(dataList))
-            if len(seqList) == recPackNum:  # 如果收到的包达到总数了，开始处理图像
+            if len(seqList) == recPackNum:  # If the number of received packets reaches the total, start processing the image
                 recPackNum = 0
                 # print('Start Img Cap')
                 data_total = b""
                 dataOk = True
                 for i in range(len(seqList)):
                     if seqList.count(i) < 1:
-                        dataOk = False  # 如果某序号不在包中，报错
+                        dataOk = False  # If a sequence number is not in the packet, report error
                         print("\033[31m Failed to process img pack \033[0m")
                         break
-                    idx0 = seqList.index(i)  # 按次序搜索包序号
+                    idx0 = seqList.index(i)  # Search for packet sequence number in order
                     data_total = data_total + dataList[idx0]
                 #if typeID==2:
                 #    print(len(data_total))
-                if dataOk:  # 如果数据都没问题，开始处理图像
+                if dataOk:  # If all data is fine, start processing the image
                     #if typeID==23:
                     #   print('Start img cap',self.VisSensor[idx].SendProtocol[0])
                     if (
@@ -973,7 +972,7 @@ class VisionCaptureApi:
 
                                 if (
                                     self.rflyStartStmp[idx] < 0.01
-                                ):  # 说明还没获取到过CopterSim时间戳
+                                ):  # Indicates that CopterSim timestamp has not been obtained yet
                                     print(
                                         "No CopterSim time, use image time to calculate."
                                     )
@@ -1039,7 +1038,7 @@ class VisionCaptureApi:
                             self.Img_lock[idx].acquire()
                             self.Img[idx] = L.reshape(
                                 PointNum, 4
-                            )  # --Lidar L.reshap(PointNum, 3)
+                            )  # --Lidar L.reshape(PointNum, 3)
                             self.Img[idx] = (
                                 self.Img[idx]
                                 / 32767.0
@@ -1050,7 +1049,7 @@ class VisionCaptureApi:
                             self.hasData[idx] = True
                             self.timeStmp[idx] = timeStmpStore
                             if (self.rflyStartStmp[idx] < 0.01):
-                                # 说明还没获取到过CopterSim时间戳
+                                # Indicates that CopterSim timestamp has not been obtained yet
                                 print(
                                     "No CopterSim time, use image time to calculate."
                                 )
@@ -1135,9 +1134,9 @@ class VisionCaptureApi:
                             dTime = time.time() - self.lastIMUTime
                             print("Img", idx, ":", timeStmpStore, ", dTimeIMU: ", dTime)
 
-                    if isEnableRosTrans and self.hasData[idx]:  # 如果需要发布ros消息
-                        if self.VisSensor[idx].TypeID >= 1:  # 目前任务所有取图操作都同时进行
-                            self.imu.AlignTime(timeStmpStore)  # 发送时间戳到imu发布线程
+                    if isEnableRosTrans and self.hasData[idx]:  # If ROS message needs to be published
+                        if self.VisSensor[idx].TypeID >= 1:  # Currently all image capture operations are performed simultaneously
+                            self.imu.AlignTime(timeStmpStore)  # Send timestamp to IMU publishing thread
                         seq_id = str(self.VisSensor[idx].SeqID)
 
                         if self.time_record[idx] < 0.0000001:
@@ -1229,8 +1228,8 @@ class VisionCaptureApi:
                                 byte_num = 3
 
                             if is_use_ros1:
-                                # 其实ros1中的图像也可以使用cv_bridge去转换,但是在ubuntu18.04之前的ros1默认不版本不支持python3,
-                                # 强行使用python3的cv_bridge去接口去转换,ROS C++中使用话题接收时存在兼容问题.综合考虑这里使用最原始的方式去赋值.
+                                # In fact, ROS1 images can also be converted using cv_bridge, but ROS1 versions before Ubuntu 18.04 do not support Python 3 by default,
+                                # Forcing the use of Python 3's cv_bridge interface for conversion can cause compatibility issues when receiving topics in ROS C++. Considering this, the most basic assignment method is used here.
                                 self.sensor_data[seq_id].height = self.Img[idx].shape[0]
                                 self.sensor_data[seq_id].width = self.Img[idx].shape[1]
                                 self.sensor_data[seq_id].encoding = encoding_
@@ -1239,7 +1238,7 @@ class VisionCaptureApi:
                                     self.sensor_data[seq_id].width * byte_num
                                 )
                             else:
-                                # 这里使用cv2_to_imgmsg实际是调用的C++接口,处理速度上比上面那种方式快,更能节省CPU资源
+                                # Using cv2_to_imgmsg here actually calls the C++ interface, which is faster in processing than the above method and saves more CPU resources
                                 # cv2.imshow("rosdata",self.Img[idx])
                                 # cv2.waitKey(1)
                                 self.sensor_data[seq_id] = self.cv_bridge.cv2_to_imgmsg(self.Img[idx], encoding= encoding_)
@@ -1418,22 +1417,22 @@ class VisionCaptureApi:
                 elif typeID == 5:
                     dtyp = np.float32
                     dim = 0
-                for ii in range(3):  # 尝试读取三次内存区域
+                for ii in range(3):  # Try to read the memory area three times
                     flag = np.frombuffer(mm, dtype=np.uint8, count=1)
                     # print(flag[0])
-                    if flag[0] == 2:  # 图像已写入完成
+                    if flag[0] == 2:  # Image writing completed
                         # print(flag[0])
                         mm.seek(0)
-                        mm.write_byte(3)  # 进入读取状态
+                        mm.write_byte(3)  # Enter reading state
 
-                        # 开始读取图片
+                        # Start reading image
                         # L=np.frombuffer(mm,dtype = np.uint8)
-                        # struct.unpack('d',L[1:9]) #获得时间戳
+                        # struct.unpack('d',L[1:9]) #Get timestamp
                         self.timeStmp[idx] = np.frombuffer(
                             mm, dtype=np.float64, count=1, offset=1
                         )
 
-                        if self.rflyStartStmp[idx] < 0.01:  # 说明还没获取到过CopterSim时间戳
+                        if self.rflyStartStmp[idx] < 0.01:  # Indicates that CopterSim timestamp has not been obtained yet
                             print("No CopterSim time, use image time to calculate.")
                             if isEnableRosTrans:
                                 if is_use_ros1:
@@ -1466,7 +1465,7 @@ class VisionCaptureApi:
                             )
 
                         mm.seek(0)
-                        mm.write_byte(4)  # 进入读取完成状态
+                        mm.write_byte(4)  # Enter read completion state
                         if (
                             typeID == 1
                             or typeID == 2
@@ -1544,17 +1543,17 @@ class VisionCaptureApi:
                             self.DistanceSensor.BoxOri = np.frombuffer(
                                 mm, dtype=np.float32, count=3, offset=53
                             )
-                        # 读取到图片后就退出for循环
+                        # Exit the for loop after reading the image
                         # print("readImg"+str(idx))
-                        # Linux ROS话题发布
-                        if isEnableRosTrans and self.hasData[idx]:  # 如果需要发布ros消息
-                            if self.VisSensor[idx].TypeID >= 1:  # 目前任务所有取图操作都同时进行
-                                self.imu.AlignTime(self.timeStmp[idx])  # 发送时间戳到imu发布线程
+                        # Linux ROS topic publishing
+                        if isEnableRosTrans and self.hasData[idx]:  # If ROS message needs to be published
+                            if self.VisSensor[idx].TypeID >= 1:  # Currently all image capture operations are performed simultaneously
+                                self.imu.AlignTime(self.timeStmp[idx])  # Send timestamp to IMU publishing thread
                             topic_name = "/rflysim/sensor" + str(
                                 self.VisSensor[idx].SeqID
                             )
-                            frame_id = "map"  # 为了方便可视化，使用默认frame_id，在算法里使用时，需要根据实际情况修改
-                            # 为了方便可视化，使用默认frame_id，在算法里使用时，需要根据实际情况修改
+                            frame_id = "map"  # For convenient visualization, use the default frame_id; modify according to actual conditions when used in algorithms
+                            # For convenient visualization, use the default frame_id; modify according to actual conditions when used in algorithms
                             if len(self.VisSensor) == self.sensors_num:
                                 frame_id = self.sensors_frame_id[idx]
                             header = std_msg.Header()
@@ -1688,7 +1687,7 @@ class VisionCaptureApi:
             self.Img = self.Img + [0]
             self.Img_lock = self.Img_lock + [
                 threading.Lock()
-            ]  # 每个传感器都是一个独立的线程，应时使用独立的锁
+            ]  # Each sensor is an independent thread, so an independent lock should be used
             self.ImgData = self.ImgData + [0]
             self.hasData = self.hasData + [False]
             self.timeStmp = self.timeStmp + [0]
@@ -1762,19 +1761,19 @@ class VisionCaptureApi:
         CheckSum = 1234567890
         timeStmpSend = self.timeStmp[idx]
 
-        # 循环发送图片码流
+        # Loop to send image stream
         for i in range(imgpackNum):
             dataSend = []
-            if imgPackUnit * (i + 1) > len(data):  # 末尾包数据提取
+            if imgPackUnit * (i + 1) > len(data):  # Extract data for the last packet
                 dataSend = data[imgPackUnit * i :]
-            else:  # 前面数据包直接提取60000数据
+            else:  # Directly extract 60000 data for previous packets
                 dataSend = data[imgPackUnit * i : imgPackUnit * (i + 1)]
-            PackLen = 4 * 4 + 8 * 1 + len(dataSend)  # fhead的4i1d长度，加上图片数据长度
+            PackLen = 4 * 4 + 8 * 1 + len(dataSend)  # Length of fhead (4i1d) plus image data length
             fhead = struct.pack(
                 "4i1d", CheckSum, PackLen, i, imgpackNum, timeStmpSend
-            )  # 校验，包长度，包序号，总包数，时间戳
-            dataSend = fhead + dataSend  # 包头加上图像数据
-            self.udp_socket.sendto(dataSend, (IP, self.portList[idx]))  # 发送出去
+            )  # Checksum, packet length, packet sequence, total packets, timestamp
+            dataSend = fhead + dataSend  # Header plus image data
+            self.udp_socket.sendto(dataSend, (IP, self.portList[idx]))  # Send out
 
     def jsonLoad(self, ChangeMode=-1, jsonPath=""):
         """load config.json file to create camera list for image capture,
@@ -1864,7 +1863,7 @@ class VisionCaptureApi:
                         "SendProtocol"
                     ]
                     if ChangeMode != -1:
-                        # 如果是远程接收模式，那么读图这里需要配置为UDP接收
+                        # If in remote reception mode, image reading here needs to be configured for UDP reception
                         visSenStruct.SendProtocol[0] = ChangeMode
                 else:
                     print("Json data format is wrong!")
@@ -1903,7 +1902,7 @@ class VisionCaptureApi:
                         print("Json data format is wrong!")
                         continue
 
-                if isNewProt:  # 新协议使用16维的otherParams
+                if isNewProt:  # New protocol uses 16-dimensional otherParams
                     if len(jsData["VisionSensors"][i]["otherParams"]) == 16:
                         visSenStruct.otherParams = jsData["VisionSensors"][i][
                             "otherParams"
@@ -1915,13 +1914,13 @@ class VisionCaptureApi:
                     if len(jsData["VisionSensors"][i]["otherParams"]) == 8:
                         visSenStruct.otherParams = (
                             jsData["VisionSensors"][i]["otherParams"] + [0] * 8
-                        )  # 扩展到16维
+                        )  # Extend to 16 dimensions
                     else:
                         print("Json data format is wrong!")
                         continue
                 self.VisSensor = self.VisSensor + [visSenStruct]
 
-                if ~self.isNewJson and isNewProt:
+                if not self.isNewJson and isNewProt:
                     self.isNewJson = True
 
         if (len(self.VisSensor)) <= 0:
@@ -1929,7 +1928,7 @@ class VisionCaptureApi:
             return False
         print("Got", len(self.VisSensor), "vision sensors from json")
 
-        if len(self.RflyTimeVect) == 0 and ~self.tTimeStmpFlag:
+        if len(self.RflyTimeVect) == 0 and not self.tTimeStmpFlag:
             # print('Start listening CopterSim time Data')
             self.StartTimeStmplisten()
             time.sleep(2)
