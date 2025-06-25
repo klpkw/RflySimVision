@@ -1,4 +1,3 @@
-
 # import required libraries
 # pip3 install pymavlink pyserial
 
@@ -12,29 +11,29 @@ import ReqCopterSim
 import RflyRosStart
 
 import sys
-# 启用ROS发布模式
+# Enable ROS publishing mode
 
 print(RflyRosStart.isLinux,RflyRosStart.isRosOk)
 req = ReqCopterSim.ReqCopterSim()
 VisionCaptureApi.isEnableRosTrans = True
 
-StartCopterID = 1 # 初始飞机的ID号
+StartCopterID = 1 # Initial aircraft ID number
 TargetIP = req.getSimIpID(StartCopterID)
-# 自动开启mavros
+# Automatically enable mavros
 # if not (RflyRosStart.isLinux and RflyRosStart.isRosOk):
 #     print('This demo can only run on with Ros')
 #     sys.exit(0)
 
-# 自动开启RosCore
+# Automatically start RosCore
 # ros = RflyRosStart.RflyRosStart(StartCopterID,TargetIP)
 
-# VisionCaptureApi 中的配置函数
+# Configuration function in VisionCaptureApi
 vis = VisionCaptureApi.VisionCaptureApi()
-vis.jsonLoad(jsonPath = "/home/sensor_pkg/singleConfig.json") # 加载Config.json中的传感器配置文件
+vis.jsonLoad(jsonPath = "/home/sensor_pkg/singleConfig.json") # Load the sensor configuration file from Config.json
 isSuss = vis.sendReqToUE4(
     0, "127.0.0.1"
 )
-vis.startImgCap()  # 开启取图循环，执行本语句之后，已经可以通过vis.Img[i]读取到图片了
+vis.startImgCap()  # Start the image capture loop; after executing this statement, images can be read from vis.Img[i]
 print('Start Image Reciver')
 
 vis.sendImuReqCopterSim(StartCopterID,TargetIP)
